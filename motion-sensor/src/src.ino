@@ -15,11 +15,29 @@ PeriodicRunner runner;
 
 std::vector<int> lights;
 std::map<int, int16_t> prev_brightness;
-bool light_changed = false;
+bool lights_changed = false;
+bool lights_on = false;
+bool motion_interrupt_triggered = false;
+uint32_t we_changed_light_at = 0;
+uint32_t motion_detected_at = 0;
 
-static const uint32_t refresh_mdns_delay = 60 * 1000;
+static const int kMotionSensorPin = 27;
+// How long to leave the lights on after motion is detected
+static const uint32_t kLightsOnDelay = 60 * 60 * 1000;
+// If lights were externally changed, how long to wait until turning them off
+static const uint32_t kExternalLightsOnDelay = 6 * 60 * 60 * 1000;
+// How long to wait before turning the lights on after turning them off
+static const uint32_t kLightsOffDelay = 30 * 1000;
+// How long to ignore light changes after we set the lights
+static const uint32_t kLightChangeIgnoreDelay = 1 * 1000;
+
+static const uint32_t kRefreshMdnsDelay = 60 * 1000;
 
 void CheckForLightChanged() {
+  if (millis() - we_changed_light_at < kLightChangeIgnoreDelay) {
+    return;
+  }
+
   bool all_off = true;
   for (int light : lights) {
     int16_t brightness = hue_client.GetLightBrightness(light);
@@ -30,9 +48,9 @@ void CheckForLightChanged() {
     }
 
     if (brightness != prev_brightness[light]) {
-      prev_brightness[light] = brightness;
-      light_changed = true;
       Serial.printf("Light %3d changed to %3d, was %3d\n", light, brightness, prev_brightness[light]);
+      prev_brightness[light] = brightness;
+      lights_changed = true;
     }
 
     if (brightness != 0) {
@@ -40,12 +58,24 @@ void CheckForLightChanged() {
     }
   }
   if (all_off) {
-    light_changed = false;
+    lights_changed = false;
+    if (lights_on) {
+      // Repect the lights-off to lights-on delay if someone else turned off the lights
+      we_changed_light_at = millis();
+    }
   }
+  lights_on = !all_off;
+}
+
+void MotionHandler() {
+  motion_interrupt_triggered = true;
 }
 
 void setup() {
   Serial.begin(115200);
+
+  pinMode(kMotionSensorPin, INPUT);
+  attachInterrupt(kMotionSensorPin, MotionHandler, RISING);
 
   Serial.print("Connecting to wifi...");
   WiFi.begin(kSsid, kPassword);
@@ -88,7 +118,7 @@ void setup() {
   } else {
     Serial.println("Error setting up MDNS responder!");
   }
-  runner.Add(refresh_mdns_delay, []() {
+  runner.Add(kRefreshMdnsDelay, []() {
     if (!MDNS.begin("motion-sensor")) {
       Serial.println("Error refreshing MDNS responder!");
     }
@@ -97,7 +127,9 @@ void setup() {
   Serial.println("Starting server...");
   dashboard = new Dashboard(&server);
   dashboard->Add<uint32_t>("Uptime", millis, 5000);
-  dashboard->Add("light changed", light_changed, 2000);
+  dashboard->Add<uint32_t>("Motion last triggered, seconds", []() { return (millis() - motion_detected_at) / 1000; }, 1000);
+  dashboard->Add<uint32_t>("We last changed lights, seconds", []() { return (millis() - we_changed_light_at) / 1000; }, 1000);
+  dashboard->Add("External light changed", lights_changed, 2000);
   dashboard->Add("lights", []() {
     std::string ret = "";
     for (auto light : lights) {
@@ -123,11 +155,36 @@ void setup() {
     prev_brightness[light] = hue_client.GetLightBrightness(light);
     Serial.printf("  %3d: %3d\n", light, prev_brightness[light]);
   }
+
+  runner.Add(1000, CheckForLightChanged);
 }
 
+uint32_t prev_millis = 0;
 void loop() {
   ArduinoOTA.handle();
   runner.Run();
 
-  runner.Add(1000, CheckForLightChanged);
+  if (motion_interrupt_triggered) {
+    Serial.println("Motion detected");
+    motion_detected_at = millis();
+
+    if (!lights_changed && millis() - we_changed_light_at > kLightsOffDelay) {
+      Serial.println("Turning on lights");
+      hue_client.SetGroupBrightness(2, 254);
+      for (int light : lights) {
+        prev_brightness[light] = 254;
+      }
+    }
+    motion_interrupt_triggered = false;
+  }
+
+  if (lights_on) {
+    if ((!lights_changed && millis() - motion_detected_at > kLightsOnDelay) ||
+      (millis() - motion_detected_at > kExternalLightsOnDelay)) {
+      Serial.println("Turning off lights");
+      hue_client.SetGroupBrightness(2, 0);
+      we_changed_light_at = millis();
+      lights_on = false;
+    }
+  }
 }

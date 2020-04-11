@@ -7,7 +7,7 @@ HueClient::HueClient(String address, String username) : address_(address), usern
 std::vector<int> HueClient::GetLightsForRoom(int room) {
   std::vector<int> lights;
   DynamicJsonDocument doc(5000);
-  bool error = Call(doc, "groups/" + String(room));
+  bool error = Get(doc, "groups/" + String(room));
   if (error) {
     // TODO: return error code instead?
     return lights;
@@ -29,7 +29,7 @@ std::vector<int> HueClient::GetLightsForRoom(int room) {
 
 int16_t HueClient::GetLightBrightness(int light) {
   DynamicJsonDocument doc(5000);
-  bool error = Call(doc, "lights/" + String(light));
+  bool error = Get(doc, "lights/" + String(light));
   if (error) {
     return -1;
   }
@@ -41,12 +41,50 @@ int16_t HueClient::GetLightBrightness(int light) {
   return on ? brightness : 0;
 }
 
-bool HueClient::Call(JsonDocument &doc, String endpoint) {
+bool HueClient::SetGroupBrightness(int group, uint8_t brightness) {
+  DynamicJsonDocument doc(1000);
+  if (brightness > 0) {
+    doc["on"] = true;
+    doc["bri"] = brightness;
+  } else {
+    doc["on"] = false;
+  }
+  return Put(doc, String("groups/") + group + "/action");
+}
+
+bool HueClient::Get(JsonDocument &doc, String endpoint) {
   WiFiClient wifi_client;
   HTTPClient http;
 
   http.begin(url_prefix_ + endpoint);
   int http_code = http.GET();
+  if (http_code != HTTP_CODE_OK) {
+    Serial.printf("Get groups failed: %d\n", http_code);
+    http.end();
+    return true;
+  }
+
+  DeserializationError err = deserializeJson(doc, http.getString());
+  http.end();
+  if (err) {
+    Serial.print(F("deserializeJson() failed: "));
+    Serial.println(err.c_str());
+    return true;
+  }
+
+  return false;
+}
+
+bool HueClient::Put(JsonDocument &doc, String endpoint) {
+  WiFiClient wifi_client;
+  HTTPClient http;
+  const uint32_t buffer_size = 5000;
+  char buffer[buffer_size];
+
+  serializeJson(doc, buffer, buffer_size);
+
+  http.begin(url_prefix_ + endpoint);
+  int http_code = http.PUT(buffer);
   if (http_code != HTTP_CODE_OK) {
     Serial.printf("Get groups failed: %d\n", http_code);
     http.end();

@@ -11,10 +11,12 @@ class HueClient {
 
     std::vector<int> GetLightsForRoom(int room);
     int16_t GetLightBrightness(int light);
+    bool SetGroupBrightness(int light, uint8_t brightness);
 
   private:
     // Calls the endpoint and parses it into doc. Returns true (and prints to the console) on error.
-    bool Call(JsonDocument &doc, String endpoint);
+    bool Get(JsonDocument &doc, String endpoint);
+    bool Put(JsonDocument &doc, String endpoint);
     void PrintJsonKeys(JsonDocument &doc);
 
     const String address_;
