@@ -4,6 +4,7 @@
 #include <dashboard.h>
 #include <map>
 #include <periodic-runner.h>
+#include <time.h>
 
 #include "constants.h"
 #include "hue-client.h"
@@ -18,10 +19,11 @@ std::map<int, int16_t> prev_brightness;
 bool lights_changed = false;
 bool lights_on = false;
 bool motion_interrupt_triggered = false;
+bool is_dark_now = false;
 uint32_t we_changed_light_at = 0;
 uint32_t motion_detected_at = 0;
 
-static const int kMotionSensorPin = 27;
+// Tuning constants
 // How long to leave the lights on after motion is detected
 static const uint32_t kLightsOnDelay = 60 * 60 * 1000;
 // If lights were externally changed, how long to wait until turning them off
@@ -30,6 +32,24 @@ static const uint32_t kExternalLightsOnDelay = 6 * 60 * 60 * 1000;
 static const uint32_t kLightsOffDelay = 30 * 1000;
 // How long to ignore light changes after we set the lights
 static const uint32_t kLightChangeIgnoreDelay = 1 * 1000;
+
+// Daytime light brightness
+static const uint8_t kDayBrightness = 254;
+// Nightime light brightness
+static const uint8_t kNightBrightness = 10;
+
+// During dark time, set the lights to a lower brightness.
+static const int kDarkStartHour = 23;
+static const int kDarkStartMinute = 30;
+static const int kDarkEndHour = 7;
+static const int kDarkEndMinute = 30;
+
+// NTP settings
+const char* kNtpServer = "pool.ntp.org";
+const long kGmtOffsetSeconds = -7 * 3600;
+const int kDaylightOffsetSeconds = 3600;
+
+static const int kMotionSensorPin = 27;
 
 static const uint32_t kRefreshMdnsDelay = 60 * 1000;
 
@@ -130,6 +150,7 @@ void setup() {
   dashboard->Add<uint32_t>("Motion last triggered, seconds", []() { return (millis() - motion_detected_at) / 1000; }, 1000);
   dashboard->Add<uint32_t>("We last changed lights, seconds", []() { return (millis() - we_changed_light_at) / 1000; }, 1000);
   dashboard->Add("External light changed", lights_changed, 2000);
+  dashboard->Add("Dark now", is_dark_now, 10000);
   dashboard->Add("lights", []() {
     std::string ret = "";
     for (auto light : lights) {
@@ -142,6 +163,15 @@ void setup() {
   }, 2000);
   server.begin();
   Serial.println("Started server.");
+
+  configTime(kGmtOffsetSeconds, kDaylightOffsetSeconds, kNtpServer);
+  // Print the time
+  struct tm timeinfo;
+   if(!getLocalTime(&timeinfo)){
+    Serial.println("Failed to obtain time");
+  }
+  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+
 
   lights = hue_client.GetLightsForRoom(2);
   Serial.print("Got lights: ");
@@ -164,15 +194,28 @@ void loop() {
   ArduinoOTA.handle();
   runner.Run();
 
+  struct tm timeinfo;
+  if(getLocalTime(&timeinfo)){
+    if (timeinfo.tm_hour > kDarkStartHour || (timeinfo.tm_hour == kDarkStartHour && timeinfo.tm_min >= kDarkStartMinute)
+      || timeinfo.tm_hour < kDarkEndHour || (timeinfo.tm_hour == kDarkEndHour && timeinfo.tm_min <= kDarkEndMinute)) {
+      is_dark_now = true;
+    } else {
+      is_dark_now = false;
+    }
+  } else {
+    Serial.println("Failed to obtain time");
+  }
+
   if (motion_interrupt_triggered) {
     Serial.println("Motion detected");
     motion_detected_at = millis();
 
     if (!lights_changed && millis() - we_changed_light_at > kLightsOffDelay) {
       Serial.println("Turning on lights");
-      hue_client.SetGroupBrightness(2, 254);
+      uint32_t brightness = is_dark_now ? kNightBrightness : kDayBrightness;
+      hue_client.SetGroupBrightness(2, brightness);
       for (int light : lights) {
-        prev_brightness[light] = 254;
+        prev_brightness[light] = brightness;
       }
     }
     motion_interrupt_triggered = false;
