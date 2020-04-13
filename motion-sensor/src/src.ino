@@ -23,6 +23,9 @@ bool is_dark_now = false;
 uint32_t we_changed_light_at = 0;
 uint32_t motion_detected_at = 0;
 
+// The Hue group id for the lights to change
+static const int kGroupId = 2;
+
 // Tuning constants
 // How long to leave the lights on after motion is detected
 static const uint32_t kLightsOnDelay = 60 * 60 * 1000;
@@ -173,7 +176,7 @@ void setup() {
   Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
 
 
-  lights = hue_client.GetLightsForRoom(2);
+  lights = hue_client.GetLightsForGroup(kGroupId);
   Serial.print("Got lights: ");
   for (int light : lights) {
     Serial.printf("%d, ", light);
@@ -213,7 +216,7 @@ void loop() {
     if (!lights_changed && millis() - we_changed_light_at > kLightsOffDelay) {
       Serial.println("Turning on lights");
       uint32_t brightness = is_dark_now ? kNightBrightness : kDayBrightness;
-      hue_client.SetGroupBrightness(2, brightness);
+      hue_client.SetGroupBrightness(kGroupId, brightness);
       for (int light : lights) {
         prev_brightness[light] = brightness;
       }
@@ -225,7 +228,7 @@ void loop() {
     if ((!lights_changed && millis() - motion_detected_at > kLightsOnDelay) ||
       (millis() - motion_detected_at > kExternalLightsOnDelay)) {
       Serial.println("Turning off lights");
-      hue_client.SetGroupBrightness(2, 0);
+      hue_client.SetGroupBrightness(kGroupId, 0);
       we_changed_light_at = millis();
       lights_on = false;
     }

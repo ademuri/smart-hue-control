@@ -9,7 +9,7 @@ class HueClient {
   public:
     HueClient(String address, String username);
 
-    std::vector<int> GetLightsForRoom(int room);
+    std::vector<int> GetLightsForGroup(int group);
     int16_t GetLightBrightness(int light);
     bool SetGroupBrightness(int light, uint8_t brightness);
 

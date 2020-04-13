@@ -4,10 +4,10 @@
 
 HueClient::HueClient(String address, String username) : address_(address), username_(username), url_prefix_(address + "api/" + username + "/") {}
 
-std::vector<int> HueClient::GetLightsForRoom(int room) {
+std::vector<int> HueClient::GetLightsForGroup(int group) {
   std::vector<int> lights;
   DynamicJsonDocument doc(5000);
-  bool error = Get(doc, "groups/" + String(room));
+  bool error = Get(doc, "groups/" + String(group));
   if (error) {
     // TODO: return error code instead?
     return lights;
