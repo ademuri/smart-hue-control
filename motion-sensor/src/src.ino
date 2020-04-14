@@ -21,16 +21,17 @@ bool lights_on = false;
 bool motion_interrupt_triggered = false;
 bool is_dark_now = false;
 uint32_t we_changed_light_at = 0;
+uint32_t light_change_detected_at = 0;
 uint32_t motion_detected_at = 0;
 
 // The Hue group id for the lights to change
-static const int kGroupId = 2;
+static const int kGroupId = 3;
 
 // Tuning constants
 // How long to leave the lights on after motion is detected
-static const uint32_t kLightsOnDelay = 60 * 60 * 1000;
+static const uint32_t kLightsOnDelay = 20 * 60 * 1000;
 // If lights were externally changed, how long to wait until turning them off
-static const uint32_t kExternalLightsOnDelay = 6 * 60 * 60 * 1000;
+static const uint32_t kExternalLightsOnDelay = 2 * 60 * 60 * 1000;
 // How long to wait before turning the lights on after turning them off
 static const uint32_t kLightsOffDelay = 30 * 1000;
 // How long to ignore light changes after we set the lights
@@ -74,6 +75,7 @@ void CheckForLightChanged() {
       Serial.printf("Light %3d changed to %3d, was %3d\n", light, brightness, prev_brightness[light]);
       prev_brightness[light] = brightness;
       lights_changed = true;
+      light_change_detected_at = millis();
     }
 
     if (brightness != 0) {
@@ -82,10 +84,6 @@ void CheckForLightChanged() {
   }
   if (all_off) {
     lights_changed = false;
-    if (lights_on) {
-      // Repect the lights-off to lights-on delay if someone else turned off the lights
-      we_changed_light_at = millis();
-    }
   }
   lights_on = !all_off;
 }
@@ -152,6 +150,7 @@ void setup() {
   dashboard->Add<uint32_t>("Uptime", millis, 5000);
   dashboard->Add<uint32_t>("Motion last triggered, seconds", []() { return (millis() - motion_detected_at) / 1000; }, 1000);
   dashboard->Add<uint32_t>("We last changed lights, seconds", []() { return (millis() - we_changed_light_at) / 1000; }, 1000);
+  dashboard->Add<uint32_t>("Light change detected at, seconds", []() { return (millis() - light_change_detected_at) / 1000; }, 1000);
   dashboard->Add("External light changed", lights_changed, 2000);
   dashboard->Add("Dark now", is_dark_now, 10000);
   dashboard->Add("lights", []() {
@@ -213,7 +212,7 @@ void loop() {
     Serial.println("Motion detected");
     motion_detected_at = millis();
 
-    if (!lights_changed && millis() - we_changed_light_at > kLightsOffDelay) {
+    if (!lights_changed && millis() - light_change_detected_at > kLightsOffDelay) {
       Serial.println("Turning on lights");
       uint32_t brightness = is_dark_now ? kNightBrightness : kDayBrightness;
       hue_client.SetGroupBrightness(kGroupId, brightness);
