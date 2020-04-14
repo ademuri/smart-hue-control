@@ -2,6 +2,7 @@
 #include <ESPmDNS.h>
 #include <WiFi.h>
 #include <dashboard.h>
+#include <iomanip>
 #include <map>
 #include <periodic-runner.h>
 #include <time.h>
@@ -57,6 +58,14 @@ static const int kMotionSensorPin = 27;
 
 static const uint32_t kRefreshMdnsDelay = 60 * 1000;
 
+static std::function<std::string()> IntervalToString(uint32_t &ms) {
+  return [&ms]() {
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(1) << (((millis() - ms) / 1000) / 60.0);
+    return stream.str();
+  };
+}
+
 void CheckForLightChanged() {
   if (millis() - we_changed_light_at < kLightChangeIgnoreDelay) {
     return;
@@ -93,6 +102,8 @@ void MotionHandler() {
 }
 
 void setup() {
+  // Dummy value (must be 0) for displaying the uptime
+  static uint32_t start_time = 0;
   Serial.begin(115200);
 
   pinMode(kMotionSensorPin, INPUT);
@@ -147,12 +158,12 @@ void setup() {
 
   Serial.println("Starting server...");
   dashboard = new Dashboard(&server);
-  dashboard->Add<uint32_t>("Uptime", millis, 5000);
-  dashboard->Add<uint32_t>("Motion last triggered, seconds", []() { return (millis() - motion_detected_at) / 1000; }, 1000);
-  dashboard->Add<uint32_t>("We last changed lights, seconds", []() { return (millis() - we_changed_light_at) / 1000; }, 1000);
-  dashboard->Add<uint32_t>("Light change detected at, seconds", []() { return (millis() - light_change_detected_at) / 1000; }, 1000);
+  dashboard->Add("Uptime, minutes", IntervalToString(start_time), 5000);
+  dashboard->Add("Motion last triggered, minutes", IntervalToString(motion_detected_at), 1000);
+  dashboard->Add("We last changed lights, minutes", IntervalToString(we_changed_light_at), 1000);
+  dashboard->Add("Light change detected at, minutes", IntervalToString(light_change_detected_at), 1000);
   dashboard->Add("External light changed", lights_changed, 2000);
-  dashboard->Add("Dark now", is_dark_now, 10000);
+  dashboard->Add("Night mode", is_dark_now, 10000);
   dashboard->Add("lights", []() {
     std::string ret = "";
     for (auto light : lights) {
