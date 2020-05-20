@@ -18,12 +18,14 @@ PeriodicRunner runner;
 std::vector<int> lights;
 std::map<int, int16_t> prev_brightness;
 bool lights_changed = false;
+bool user_turned_lights_off = false;
 bool lights_on = false;
 bool motion_interrupt_triggered = false;
 bool is_dark_now = false;
 uint32_t we_changed_light_at = 0;
 uint32_t light_change_detected_at = 0;
 uint32_t motion_detected_at = 0;
+uint32_t unoccupied_at = 0;
 
 // The Hue group id for the lights to change
 static const int kGroupId = 3;
@@ -36,7 +38,9 @@ static const uint32_t kExternalLightsOnDelay = 2 * 60 * 60 * 1000;
 // How long to wait before turning the lights on after turning them off
 static const uint32_t kLightsOffDelay = 30 * 1000;
 // How long to ignore light changes after we set the lights
-static const uint32_t kLightChangeIgnoreDelay = 1 * 1000;
+static const uint32_t kLightChangeIgnoreDelay = 5 * 1000;
+// After motion is detected, how long to consider the room occupied
+static const uint32_t kOccupiedDelay = 10 * 60 * 1000;
 
 // Daytime light brightness
 static const uint8_t kDayBrightness = 254;
@@ -71,6 +75,8 @@ void CheckForLightChanged() {
     return;
   }
 
+  user_turned_lights_off = false;
+
   bool all_off = true;
   for (int light : lights) {
     int16_t brightness = hue_client.GetLightBrightness(light);
@@ -93,6 +99,7 @@ void CheckForLightChanged() {
   }
   if (all_off) {
     lights_changed = false;
+    user_turned_lights_off = true;
   }
   lights_on = !all_off;
 }
@@ -163,6 +170,7 @@ void setup() {
   dashboard->Add("We last changed lights, minutes", IntervalToString(we_changed_light_at), 1000);
   dashboard->Add("Light change detected at, minutes", IntervalToString(light_change_detected_at), 1000);
   dashboard->Add("External light changed", lights_changed, 2000);
+  dashboard->Add("User turned lights off", user_turned_lights_off, 2000);
   dashboard->Add("Night mode", is_dark_now, 10000);
   dashboard->Add("lights", []() {
     std::string ret = "";
@@ -202,7 +210,6 @@ void setup() {
   runner.Add(1000, CheckForLightChanged);
 }
 
-uint32_t prev_millis = 0;
 void loop() {
   ArduinoOTA.handle();
   runner.Run();
@@ -223,7 +230,9 @@ void loop() {
     Serial.println("Motion detected");
     motion_detected_at = millis();
 
-    if (!lights_changed && millis() - light_change_detected_at > kLightsOffDelay) {
+    if (user_turned_lights_off && unoccupied_at > millis()) {
+      // If the room is occupied and the user turned off the lights manually, don't change them
+    } else if (!lights_changed && millis() - light_change_detected_at > kLightsOffDelay) {
       Serial.println("Turning on lights");
       uint32_t brightness = is_dark_now ? kNightBrightness : kDayBrightness;
       hue_client.SetGroupBrightness(kGroupId, brightness);
@@ -232,6 +241,7 @@ void loop() {
       }
     }
     motion_interrupt_triggered = false;
+    unoccupied_at = millis() + kOccupiedDelay;
   }
 
   if (lights_on) {
@@ -241,6 +251,9 @@ void loop() {
       hue_client.SetGroupBrightness(kGroupId, 0);
       we_changed_light_at = millis();
       lights_on = false;
+      for (int light : lights) {
+        prev_brightness[light] = 0;
+      }
     }
   }
 }
