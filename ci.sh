@@ -15,18 +15,20 @@
 
 
 set -euo pipefail
-
-pushd motion-sensor
 constants_exists=
-
-if [ ! -f "lib/constants/constants.h" ]; then
-  cp lib/constants/constants.sample.h lib/constants/constants.h
+if [ ! -f "constants/constants.h" ]; then
+  cp constants/constants.sample.h constants/constants.h
   constants_exists=true
 fi
 
+pushd motion-sensor
 platformio run
-if [ "$constants_exists" = true]; then
-  rm lib/constants/constants.h
-fi
-
 popd
+
+pushd daylight-simulator
+platformio run
+popd
+
+if [ "$constants_exists" = true ]; then
+  rm constants/constants.h
+fi
