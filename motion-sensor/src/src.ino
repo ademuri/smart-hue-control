@@ -79,21 +79,21 @@ void CheckForLightChanged() {
 
   bool all_off = true;
   for (int light : lights) {
-    int16_t brightness = hue_client.GetLightBrightness(light);
+    LightStatus status = hue_client.GetLightStatus(light);
 
     // Ignore errors (hopefully temporary)
-    if (brightness < 0) {
+    if (status.error) {
       continue;
     }
 
-    if (brightness != prev_brightness[light]) {
-      Serial.printf("Light %3d changed to %3d, was %3d\n", light, brightness, prev_brightness[light]);
-      prev_brightness[light] = brightness;
+    if (status.brightness != prev_brightness[light]) {
+      Serial.printf("Light %3d changed to %3d, was %3d\n", light, status.brightness, prev_brightness[light]);
+      prev_brightness[light] = status.brightness;
       lights_changed = true;
       light_change_detected_at = millis();
     }
 
-    if (brightness != 0) {
+    if (status.brightness != 0) {
       all_off = false;
     }
   }
@@ -203,7 +203,7 @@ void setup() {
 
   Serial.println("Initial brightness: ");
   for (int light : lights) {
-    prev_brightness[light] = hue_client.GetLightBrightness(light);
+    prev_brightness[light] = hue_client.GetLightStatus(light).brightness;
     Serial.printf("  %3d: %3d\n", light, prev_brightness[light]);
   }
 

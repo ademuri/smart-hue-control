@@ -41,18 +41,21 @@ std::vector<int> HueClient::GetLightsForGroup(int group) {
   return lights;
 }
 
-int16_t HueClient::GetLightBrightness(int light) {
+LightStatus HueClient::GetLightStatus(int light) {
+  LightStatus status = {false, false, 0, 0, 0};
+
   DynamicJsonDocument doc(5000);
   bool error = Get(doc, "lights/" + String(light));
   if (error) {
-    return -1;
+    status.error = true;
+    return status;
   }
-  bool on = doc["state"]["on"];
-  uint8_t brightness = doc["state"]["bri"];
-  //Serial.printf("on: %d, brightness: %u\n", on, brightness);
 
-  // Hue API returns the brightness regardless if the light is on
-  return on ? brightness : 0;
+  status.on = doc["state"]["on"];
+  status.raw_brightness = doc["state"]["bri"];
+  status.brightness = status.on ? status.raw_brightness : 0;
+  status.temperature = doc["state"]["ct"];
+  return status;
 }
 
 bool HueClient::SetGroupBrightness(int group, uint8_t brightness) {

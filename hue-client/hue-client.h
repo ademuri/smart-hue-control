@@ -21,12 +21,25 @@
 #include <string>
 #include <vector>
 
+struct LightStatus {
+  bool error;
+  bool on;
+  
+  // Brightness, or 0 if off
+  uint8_t brightness;
+
+  // Raw brightness (could be non-zero even if the light is off).
+  uint8_t raw_brightness;
+
+  uint16_t temperature;
+};
+
 class HueClient {
   public:
     HueClient(String address, String username);
 
     std::vector<int> GetLightsForGroup(int group);
-    int16_t GetLightBrightness(int light);
+    LightStatus GetLightStatus(int light);
     bool SetGroupBrightness(int light, uint8_t brightness);
 
   private:
