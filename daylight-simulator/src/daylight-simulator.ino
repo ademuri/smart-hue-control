@@ -50,7 +50,7 @@ void setup() {
     });
   ArduinoOTA.begin();
 
-  if (MDNS.begin("motion-sensor")) {
+  if (MDNS.begin("daylight-simulator")) {
     // Add service to MDNS-SD
     MDNS.addService("_http", "_tcp", 80);
     Serial.println("mDNS responder started");
@@ -58,7 +58,7 @@ void setup() {
     Serial.println("Error setting up MDNS responder!");
   }
   runner.Add(kRefreshMdnsDelay, []() {
-    if (!MDNS.begin("motion-sensor")) {
+    if (!MDNS.begin("daylight-simulator")) {
       Serial.println("Error refreshing MDNS responder!");
     }
   });
