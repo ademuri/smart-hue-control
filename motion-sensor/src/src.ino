@@ -21,7 +21,7 @@ enum class Events {
 
 // Context used by state machine states.
 struct Context {
-  bool is_dark_now;
+  bool is_night_mode;
 };
 
 StateManager<Context, Events, Events::kTimer>* state_manager;
@@ -34,7 +34,7 @@ PeriodicRunner runner;
 std::vector<int> lights;
 std::map<int, int16_t> prev_brightness;
 bool motion_interrupt_triggered = false;
-bool is_dark_now = false;
+bool is_night_mode = false;
 uint32_t we_changed_light_at = 0;
 uint32_t light_change_detected_at = 0;
 uint32_t motion_detected_at = 0;
@@ -183,7 +183,7 @@ void setup() {
   dashboard->Add("Motion last triggered, minutes", IntervalToString(motion_detected_at), 1000);
   dashboard->Add("We last changed lights, minutes", IntervalToString(we_changed_light_at), 1000);
   dashboard->Add("Light change detected at, minutes", IntervalToString(light_change_detected_at), 1000);
-  dashboard->Add("Night mode", is_dark_now, 10000);
+  dashboard->Add("Night mode", is_night_mode, 10000);
   dashboard->Add("lights", []() {
     std::string ret = "";
     for (auto light : lights) {
@@ -237,7 +237,7 @@ void setup() {
 
   State<Context, Events>* turn_on = new State<Context, Events>("turn_on", {}, [](Context* context, bool state_changed) {
     if (state_changed) {
-      uint32_t brightness = context->is_dark_now ? kNightBrightness : kDayBrightness;
+      uint32_t brightness = context->is_night_mode ? kNightBrightness : kDayBrightness;
       hue_client.SetGroupBrightness(kGroupId, brightness);
       we_changed_light_at = millis();
     }
@@ -287,9 +287,9 @@ void loop() {
   if(getLocalTime(&timeinfo)){
     if (timeinfo.tm_hour > kDarkStartHour || (timeinfo.tm_hour == kDarkStartHour && timeinfo.tm_min >= kDarkStartMinute)
       || timeinfo.tm_hour < kDarkEndHour || (timeinfo.tm_hour == kDarkEndHour && timeinfo.tm_min <= kDarkEndMinute)) {
-      state_manager->context()->is_dark_now = true;
+      state_manager->context()->is_night_mode = true;
     } else {
-      state_manager->context()->is_dark_now = false;
+      state_manager->context()->is_night_mode = false;
     }
   } else {
     Serial.println("Failed to obtain time");
