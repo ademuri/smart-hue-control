@@ -41,12 +41,17 @@ class HueClient {
     std::vector<int> GetLightsForGroup(int group);
     LightStatus GetLightStatus(int light);
     bool SetGroupBrightness(int light, uint8_t brightness);
+    uint32_t last_put_latency();
+    uint32_t last_put_function_latency();
 
   private:
     // Calls the endpoint and parses it into doc. Returns true (and prints to the console) on error.
     bool Get(JsonDocument &doc, String endpoint);
     bool Put(JsonDocument &doc, String endpoint);
     void PrintJsonKeys(JsonDocument &doc);
+
+    uint32_t last_put_latency_ = 0;
+    uint32_t last_put_function_latency_ = 0;
 
     const String address_;
     const String username_;

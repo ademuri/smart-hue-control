@@ -69,6 +69,14 @@ bool HueClient::SetGroupBrightness(int group, uint8_t brightness) {
   return Put(doc, String("groups/") + group + "/action");
 }
 
+uint32_t HueClient::last_put_latency() {
+  return last_put_latency_;
+}
+
+uint32_t HueClient::last_put_function_latency() {
+  return last_put_function_latency_;
+}
+
 bool HueClient::Get(JsonDocument &doc, String endpoint) {
   WiFiClient wifi_client;
   HTTPClient http;
@@ -76,7 +84,7 @@ bool HueClient::Get(JsonDocument &doc, String endpoint) {
   http.begin(url_prefix_ + endpoint);
   int http_code = http.GET();
   if (http_code != HTTP_CODE_OK) {
-    Serial.printf("Get groups failed: %d\n", http_code);
+    Serial.printf("Get failed: %d\n", http_code);
     http.end();
     return true;
   }
@@ -93,6 +101,7 @@ bool HueClient::Get(JsonDocument &doc, String endpoint) {
 }
 
 bool HueClient::Put(JsonDocument &doc, String endpoint) {
+  uint32_t function_start = millis();
   WiFiClient wifi_client;
   HTTPClient http;
   const uint32_t buffer_size = 5000;
@@ -100,16 +109,21 @@ bool HueClient::Put(JsonDocument &doc, String endpoint) {
 
   serializeJson(doc, buffer, buffer_size);
 
+  uint32_t put_start = millis();
   http.begin(url_prefix_ + endpoint);
   int http_code = http.PUT(buffer);
+  last_put_latency_ = millis() - put_start;
+
   if (http_code != HTTP_CODE_OK) {
-    Serial.printf("Get groups failed: %d\n", http_code);
+    Serial.printf("Put failed: %d\n", http_code);
     http.end();
     return true;
   }
 
   DeserializationError err = deserializeJson(doc, http.getString());
   http.end();
+  last_put_function_latency_ = millis() - function_start;
+
   if (err) {
     Serial.print(F("deserializeJson() failed: "));
     Serial.println(err.c_str());

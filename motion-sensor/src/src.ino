@@ -7,6 +7,8 @@
 #include <periodic-runner.h>
 #include <time.h>
 
+#include <esp_wifi.h>
+
 #include "constants.h"
 #include "hue-client.h"
 #include "state-manager.h"
@@ -135,7 +137,7 @@ void setup() {
   Serial.println(" done.");
   delay(500);
   WiFi.setSleep(false);
-  Esp_wifi_set_ps(WIFI_PS_NONE);
+  esp_wifi_set_ps(WIFI_PS_NONE);
 
   ArduinoOTA
     .onStart([]() {
@@ -258,6 +260,8 @@ void setup() {
     String metrics = String(String("uptime ") + String(millis() - start_time));
     metrics = String(metrics + "\n# TYPE state gauge");
     metrics = String(metrics + String("\nstate{name=\"") + String(state_manager->CurrentStateName()) + String("\"} 1"));
+    metrics = String(metrics + String("\nlast_put_latency_millis{type = \"http\"} ") + String(hue_client.last_put_latency()));
+    metrics = String(metrics + String("\nlast_put_latency_millis{type = \"total\"} ") + String(hue_client.last_put_function_latency()));
     request->send(200, "text/plain", metrics);
   });
 
