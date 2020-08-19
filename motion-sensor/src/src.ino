@@ -176,49 +176,6 @@ void setup() {
     }
   });
 
-  Serial.println("Starting server...");
-  dashboard = new Dashboard(&server);
-  dashboard->Add("Uptime, minutes", IntervalToString(start_time), 5000);
-  dashboard->Add("State", []() { return state_manager->CurrentStateName(); }, 1000);
-  dashboard->Add("Motion last triggered, minutes", IntervalToString(motion_detected_at), 1000);
-  dashboard->Add("We last changed lights, minutes", IntervalToString(we_changed_light_at), 1000);
-  dashboard->Add("Light change detected at, minutes", IntervalToString(light_change_detected_at), 1000);
-  dashboard->Add("Night mode", is_night_mode, 10000);
-  dashboard->Add("lights", []() {
-    std::string ret = "";
-    for (auto light : lights) {
-      const uint16_t buf_size = 50;
-      char buf[buf_size];
-      snprintf(buf, buf_size, "(%3d: %3d)&nbsp;&nbsp;", light, prev_brightness[light]);
-      ret += buf;
-    }
-    return ret;
-  }, 2000);
-  server.begin();
-  Serial.println("Started server.");
-
-  configTime(kGmtOffsetSeconds, kDaylightOffsetSeconds, kNtpServer);
-  // Print the time
-  struct tm timeinfo;
-   if(!getLocalTime(&timeinfo)){
-    Serial.println("Failed to obtain time");
-  }
-  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
-
-
-  lights = hue_client.GetLightsForGroup(kGroupId);
-  Serial.print("Got lights: ");
-  for (int light : lights) {
-    Serial.printf("%d, ", light);
-  }
-  Serial.println();
-
-  Serial.println("Initial brightness: ");
-  for (int light : lights) {
-    prev_brightness[light] = hue_client.GetLightStatus(light).brightness;
-    Serial.printf("  %3d: %3d\n", light, prev_brightness[light]);
-  }
-
   State<Context, Events>* off = new State<Context, Events>("off", {}, [](Context* context, bool state_changed) {
     return (uint32_t) 0;
   });
@@ -275,6 +232,58 @@ void setup() {
   manual_off->transitions[Events::kLightsChanged] = manual_on;
 
   state_manager = new StateManager<Context, Events, Events::kTimer>(off, new Context());
+
+  Serial.println("Starting server...");
+  dashboard = new Dashboard(&server);
+  dashboard->Add("Uptime, minutes", IntervalToString(start_time), 5000);
+  dashboard->Add("State", []() { return state_manager->CurrentStateName(); }, 1000);
+  dashboard->Add("Motion last triggered, minutes", IntervalToString(motion_detected_at), 1000);
+  dashboard->Add("We last changed lights, minutes", IntervalToString(we_changed_light_at), 1000);
+  dashboard->Add("Light change detected at, minutes", IntervalToString(light_change_detected_at), 1000);
+  dashboard->Add("Night mode", is_night_mode, 10000);
+  dashboard->Add("lights", []() {
+    std::string ret = "";
+    for (auto light : lights) {
+      const uint16_t buf_size = 50;
+      char buf[buf_size];
+      snprintf(buf, buf_size, "(%3d: %3d)&nbsp;&nbsp;", light, prev_brightness[light]);
+      ret += buf;
+    }
+    return ret;
+  }, 2000);
+
+  // Create an HTTP endpoint for Prometheus
+  server.on("/metrics", HTTP_GET, [](AsyncWebServerRequest *request) {
+    String metrics = String(String("uptime ") + String(millis() - start_time));
+    metrics = String(metrics + "\n# TYPE state gauge");
+    metrics = String(metrics + String("\nstate{name=\"") + String(state_manager->CurrentStateName()) + String("\"} 1"));
+    request->send(200, "text/plain", metrics);
+  });
+
+  server.begin();
+  Serial.println("Started server.");
+
+  configTime(kGmtOffsetSeconds, kDaylightOffsetSeconds, kNtpServer);
+  // Print the time
+  struct tm timeinfo;
+   if(!getLocalTime(&timeinfo)){
+    Serial.println("Failed to obtain time");
+  }
+  Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+
+
+  lights = hue_client.GetLightsForGroup(kGroupId);
+  Serial.print("Got lights: ");
+  for (int light : lights) {
+    Serial.printf("%d, ", light);
+  }
+  Serial.println();
+
+  Serial.println("Initial brightness: ");
+  for (int light : lights) {
+    prev_brightness[light] = hue_client.GetLightStatus(light).brightness;
+    Serial.printf("  %3d: %3d\n", light, prev_brightness[light]);
+  }
 
   runner.Add(2000, CheckForLightChanged);
 }
