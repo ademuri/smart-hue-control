@@ -135,6 +135,7 @@ void setup() {
   Serial.println(" done.");
   delay(500);
   WiFi.setSleep(false);
+  Esp_wifi_set_ps(WIFI_PS_NONE);
 
   ArduinoOTA
     .onStart([]() {
