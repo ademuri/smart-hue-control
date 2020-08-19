@@ -280,9 +280,16 @@ void setup() {
   Serial.println();
 
   Serial.println("Initial brightness: ");
+  bool all_off = true;
   for (int light : lights) {
     prev_brightness[light] = hue_client.GetLightStatus(light).brightness;
     Serial.printf("  %3d: %3d\n", light, prev_brightness[light]);
+    if (prev_brightness[light] != 0) {
+      all_off = false;
+    }
+  }
+  if (!all_off) {
+    state_manager->HandleEvent(Events::kLightsChanged);
   }
 
   runner.Add(2000, CheckForLightChanged);
