@@ -37,6 +37,7 @@ std::vector<int> lights;
 std::map<int, int16_t> prev_brightness;
 bool motion_interrupt_triggered = false;
 bool is_night_mode = false;
+bool we_changed_light = false;
 uint32_t we_changed_light_at = 0;
 uint32_t light_change_detected_at = 0;
 uint32_t motion_detected_at = 0;
@@ -50,7 +51,7 @@ static const int kGroupId = 3;
 // How long to leave the lights on after motion is detected
 static const uint32_t kLightsOnDelay = 20 * 60 * 1000;
 // If lights were externally changed, how long to wait until turning them off
-static const uint32_t kExternalLightsOnDelay = 2 * 60 * 60 * 1000;
+static const uint32_t kExternalLightsOnDelay = 30 * 60 * 1000;
 // How long to wait before turning the lights on after turning them off
 static const uint32_t kLightsOffDelay = 30 * 1000;
 // How long to ignore light changes after we set the lights
@@ -107,6 +108,13 @@ void CheckForLightChanged() {
     if (status.brightness != 0) {
       all_off = false;
     }
+  }
+  // After we change the lights, ignore the first light change we get back from Hue.
+  if (we_changed_light) {
+    if (millis() - we_changed_light_at > kLightChangeIgnoreDelay) {
+      we_changed_light = false;
+    }
+    return;
   }
   if (did_lights_change) {
     if (all_off) {
@@ -200,6 +208,7 @@ void setup() {
       uint32_t brightness = context->is_night_mode ? kNightBrightness : kDayBrightness;
       hue_client.SetGroupBrightness(kGroupId, brightness);
       we_changed_light_at = millis();
+      we_changed_light = true;
     }
     return kLightChangeIgnoreDelay;
   });
